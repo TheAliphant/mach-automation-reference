@@ -1,0 +1,43 @@
+[
+  {
+    "name": "high budget + urgent",
+    "input": {
+      "name": "Ada Example",
+      "email": "ada@example.com",
+      "company": "Example Ltd",
+      "message": "We need an automation this week",
+      "budget": 2500
+    },
+    "expected": {
+      "ok": true,
+      "priority": "high",
+      "reason": "budget_and_urgency"
+    }
+  },
+  {
+    "name": "invalid email",
+    "input": {
+      "name": "Bad Email",
+      "email": "not-an-email",
+      "message": "Normal request",
+      "budget": 500
+    },
+    "expected": {
+      "ok": false,
+      "validation": [
+        "invalid_email"
+      ]
+    }
+  },
+  {
+    "name": "missing optional fields",
+    "input": {
+      "email": "test@example.com"
+    },
+    "expected": {
+      "ok": true,
+      "priority": "normal",
+      "reason": "default"
+    }
+  }
+]

@@ -1,0 +1,84 @@
+{
+  "name": "MACH — Lead Intake Triage Reference",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mach-lead-triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1f9e98bb-00f1-4ba3-9955-f127571a1e10",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        0
+      ],
+      "webhookId": "8e2ca4fe-18c5-4f06-a755-09f05b4a1e71"
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $json.body ?? $json;\nconst text = String(src.message ?? '').trim();\nconst budget = Number(src.budget ?? 0);\nconst email = String(src.email ?? '').trim().toLowerCase();\nconst urgent = /today|urgent|asap|this week/i.test(text);\nconst validEmail = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email);\nlet priority = 'normal';\nlet reason = 'default';\nif (budget >= 2000 && urgent) { priority = 'high'; reason = 'budget_and_urgency'; }\nelse if (budget >= 2000) { priority = 'high'; reason = 'budget'; }\nelse if (urgent) { priority = 'high'; reason = 'urgency'; }\nreturn [{\n  json: {\n    ok: validEmail,\n    lead: {\n      name: String(src.name ?? '').trim(),\n      email,\n      company: String(src.company ?? '').trim()\n    },\n    triage: { priority, reason },\n    validation: validEmail ? [] : ['invalid_email']\n  }\n}];"
+      },
+      "id": "668735db-29cf-4a1f-95ed-ed57bc1cafaf",
+      "name": "Normalize + classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "8f414975-1961-4db6-a6d1-8231138916aa",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize + classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize + classify": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "70282bdd-c4e1-4d5c-a60c-76cdd5d55978",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}

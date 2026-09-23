@@ -1,0 +1,80 @@
+name: Watch and Register MACH Agent Lab Edge
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-register:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check expected edge host
+        id: check
+        shell: bash
+        run: |
+          set -euo pipefail
+          EDGE="https://mach-agent-lab-edge.vercel.app"
+          STATUS=$(curl -sS -o /tmp/health.json -w "%{http_code}" "$EDGE/api/health" || true)
+          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          echo "EDGE=$EDGE" >> "$GITHUB_ENV"
+          if [ "$STATUS" != "200" ]; then
+            echo "Edge not live yet (HTTP $STATUS). Nothing to register."
+            exit 0
+          fi
+          jq -e '.productionConnected == false' /tmp/health.json
+          jq -e '.a2a.protocolVersion == "1.0"' /tmp/health.json
+          jq -e '.a2a.sendMessage == true' /tmp/health.json
+
+      - name: Verify Agent Card
+        if: steps.check.outputs.status == '200'
+        run: |
+          set -euo pipefail
+          curl -fsS "$EDGE/.well-known/agent-card.json" -o /tmp/card.json
+          jq -e '.name == "MACH Agent Lab Edge"' /tmp/card.json
+          jq -e '.supportedInterfaces[0].protocolBinding == "HTTP+JSON"' /tmp/card.json
+          jq -e '.supportedInterfaces[0].protocolVersion == "1.0"' /tmp/card.json
+          jq -e '.capabilities.streaming == false' /tmp/card.json
+
+      - name: Verify external A2A SendMessage
+        if: steps.check.outputs.status == '200'
+        run: |
+          set -euo pipefail
+          cat >/tmp/request.json <<'JSON'
+          {
+            "message": {
+              "messageId": "github-external-verification-1",
+              "role": "ROLE_USER",
+              "parts": [
+                {
+                  "text": "Find a capability that can normalize JSON",
+                  "mediaType": "text/plain"
+                }
+              ]
+            },
+            "metadata": {
+              "source": "github-external-verification"
+            }
+          }
+          JSON
+          curl -fsS             -H "Content-Type: application/json"             --data-binary @/tmp/request.json             "$EDGE/api/a2a/message:send"             -o /tmp/response.json
+          jq -e '.message.role == "ROLE_AGENT"' /tmp/response.json
+          jq -e '.message.parts[0].data.productionConnected == false' /tmp/response.json
+          jq -e '.message.parts[0].data.results | length > 0' /tmp/response.json
+
+      - name: Register verified edge at a2aregistry.org
+        if: steps.check.outputs.status == '200'
+        run: |
+          set -euo pipefail
+          URI="$EDGE/.well-known/agent-card.json"
+          PAYLOAD=$(jq -nc --arg uri "$URI" '{wellKnownURI:$uri}')
+          STATUS=$(curl -sS -o /tmp/registry-response.json -w "%{http_code}"             -X POST "https://a2aregistry.org/api/agents/register"             -H "Content-Type: application/json"             -d "$PAYLOAD")
+          cat /tmp/registry-response.json || true
+          echo "Registry HTTP $STATUS"
+          case "$STATUS" in
+            200|201|202|409) exit 0 ;;
+            *) exit 1 ;;
+          esac

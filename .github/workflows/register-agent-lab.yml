@@ -25,19 +25,20 @@ jobs:
           jq -e '.a2a.sendMessage == true' /tmp/health.json
           curl --retry 3 --retry-delay 2 -fsS "$EDGE/.well-known/agent-card.json" -o /tmp/card.json
           jq -e '.name == "MACH Agent Lab Edge"' /tmp/card.json
-          jq -e '.supportedInterfaces[0].url == "https://mach-agent-lab-edge.vercel.app/api/a2a"' /tmp/card.json
-          jq -e '.supportedInterfaces[0].protocolBinding == "HTTP+JSON"' /tmp/card.json
-          jq -e '.supportedInterfaces[0].protocolVersion == "1.0"' /tmp/card.json
+          jq -e '[.supportedInterfaces[].protocolBinding] | index("JSONRPC") != null' /tmp/card.json
+          jq -e '[.supportedInterfaces[].protocolBinding] | index("HTTP+JSON") != null' /tmp/card.json
+          jq -e '.supportedInterfaces[] | select(.protocolBinding == "JSONRPC") | .url == "https://mach-agent-lab-edge.vercel.app/api/jsonrpc"' /tmp/card.json
+          jq -e '.supportedInterfaces[] | select(.protocolBinding == "JSONRPC") | .protocolVersion == "1.0"' /tmp/card.json
           jq -e '.capabilities.streaming == false' /tmp/card.json
 
-      - name: Verify external A2A SendMessage
+      - name: Verify external HTTP+JSON SendMessage
         run: |
           set -euo pipefail
           EDGE="https://mach-agent-lab-edge.vercel.app"
-          cat >/tmp/request.json <<'JSON'
+          cat >/tmp/http-request.json <<'JSON'
           {
             "message": {
-              "messageId": "sidecar-external-verification-1",
+              "messageId": "sidecar-http-verification-1",
               "role": "ROLE_USER",
               "parts": [
                 {
@@ -47,17 +48,51 @@ jobs:
               ]
             },
             "metadata": {
-              "source": "mach-automation-reference-external-verifier"
+              "source": "mach-automation-reference-http-verifier"
             }
           }
           JSON
-          curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             -H "A2A-Version: 1.0"             --data-binary @/tmp/request.json             "$EDGE/api/a2a/message:send"             -o /tmp/a2a-response.json
-          cat /tmp/a2a-response.json
-          jq -e '.message.role == "ROLE_AGENT"' /tmp/a2a-response.json
-          jq -e '.message.metadata.a2aProtocolVersion == "1.0"' /tmp/a2a-response.json
-          jq -e '.message.parts[0].data.productionConnected == false' /tmp/a2a-response.json
-          jq -e '.message.parts[0].data.results | length > 0' /tmp/a2a-response.json
-          jq -e '.message.parts[0].data.results[0].id == "lab.mock.json-normalize"' /tmp/a2a-response.json
+          curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             -H "A2A-Version: 1.0"             --data-binary @/tmp/http-request.json             "$EDGE/api/a2a/message:send"             -o /tmp/http-response.json
+          cat /tmp/http-response.json
+          jq -e '.message.role == "ROLE_AGENT"' /tmp/http-response.json
+          jq -e '.message.metadata.a2aProtocolVersion == "1.0"' /tmp/http-response.json
+          jq -e '.message.parts[0].data.productionConnected == false' /tmp/http-response.json
+          jq -e '.message.parts[0].data.results[0].id == "lab.mock.json-normalize"' /tmp/http-response.json
+
+      - name: Verify external JSONRPC SendMessage
+        run: |
+          set -euo pipefail
+          EDGE="https://mach-agent-lab-edge.vercel.app"
+          cat >/tmp/rpc-request.json <<'JSON'
+          {
+            "jsonrpc": "2.0",
+            "id": "sidecar-jsonrpc-verification-1",
+            "method": "SendMessage",
+            "params": {
+              "message": {
+                "messageId": "sidecar-jsonrpc-message-1",
+                "role": "ROLE_USER",
+                "parts": [
+                  {
+                    "text": "Find a capability that can normalize JSON",
+                    "mediaType": "text/plain"
+                  }
+                ]
+              },
+              "metadata": {
+                "source": "mach-automation-reference-jsonrpc-verifier"
+              }
+            }
+          }
+          JSON
+          curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             -H "A2A-Version: 1.0"             --data-binary @/tmp/rpc-request.json             "$EDGE/api/jsonrpc"             -o /tmp/rpc-response.json
+          cat /tmp/rpc-response.json
+          jq -e '.jsonrpc == "2.0"' /tmp/rpc-response.json
+          jq -e '.id == "sidecar-jsonrpc-verification-1"' /tmp/rpc-response.json
+          jq -e '.result.message.role == "ROLE_AGENT"' /tmp/rpc-response.json
+          jq -e '.result.message.metadata.protocolBinding == "JSONRPC"' /tmp/rpc-response.json
+          jq -e '.result.message.parts[0].data.productionConnected == false' /tmp/rpc-response.json
+          jq -e '.result.message.parts[0].data.results[0].id == "lab.mock.json-normalize"' /tmp/rpc-response.json
 
       - name: Verify production execution is blocked
         run: |

@@ -1,0 +1,18 @@
+# MACH Discovery Lab
+
+This is an independent LAB-ONLY agent-discovery environment.
+
+## Important
+- It is not MACH production.
+- It does not execute paid MACH services.
+- It has no production network connection.
+- Capabilities prefixed lab.mock.* are deterministic fixtures for agent-behaviour research.
+
+## Agent actions
+- Discover: GET /v1/discover?task=<natural language task>
+- Quote: GET /v1/quote?capability_id=<lab.mock.id>
+- Probe: POST /v1/probe
+- Feedback: POST /v1/report-outcome
+- Production execution: disabled
+
+Prefer capabilities only when their input/output schema directly matches the requested task.

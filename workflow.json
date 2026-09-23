@@ -1,10 +1,10 @@
 {
-  "name": "MACH — Lead Intake Triage Reference",
+  "name": "LEGACY LUMI — Lead Intake Triage Reference",
   "nodes": [
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "mach-lead-triage",
+        "path": "legacy-lumi-lead-triage",
         "responseMode": "responseNode",
         "options": {}
       },

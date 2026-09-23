@@ -98,12 +98,13 @@ jobs:
         run: |
           set -euo pipefail
           EDGE="https://mach-agent-lab-edge.vercel.app"
-          STATUS=$(curl -sS -o /tmp/execute.json -w "%{http_code}"             -X POST "$EDGE/api/execute")
+          STATUS=$(curl -sS -o /tmp/execute.json -w "%{http_code}" -X POST "$EDGE/api/execute")
           test "$STATUS" = "503"
           jq -e '.productionConnected == false' /tmp/execute.json
           jq -e '.error == "production_execution_disabled"' /tmp/execute.json
 
       - name: Register at a2aregistry.org
+        if: github.event_name != 'schedule'
         run: |
           set -euo pipefail
           URI="https://mach-agent-lab-edge.vercel.app/.well-known/agent-card.json"
@@ -116,15 +117,29 @@ jobs:
             *) exit 1 ;;
           esac
 
-      - name: Ingest at Global A2A Registry
+      - name: Probe Global A2A Registry ingest
+        if: github.event_name != 'schedule'
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -u
           MANIFEST="https://mach-agent-lab-edge.vercel.app/.well-known/agent-card.json"
           PAYLOAD=$(jq -nc --arg manifestUrl "$MANIFEST" '{manifestUrl:$manifestUrl}')
-          STATUS=$(curl -sS -o /tmp/global-registry.json -w "%{http_code}"             -X POST "https://api.a2a-registry.org/public/ingest"             -H "Content-Type: application/json"             -d "$PAYLOAD")
-          cat /tmp/global-registry.json || true
-          echo "Global A2A Registry HTTP $STATUS"
-          case "$STATUS" in
-            200|201|202|409|422) exit 0 ;;
-            *) exit 1 ;;
-          esac
+          ENDPOINTS=(
+            "https://api.a2a-registry.org/public/ingest"
+            "https://api.a2a-registry.org/api/public/ingest"
+            "https://www.a2a-registry.org/api/public/ingest"
+          )
+          for URL in "${ENDPOINTS[@]}"; do
+            STATUS=$(curl -sS -o /tmp/global-registry.json -w "%{http_code}"               -X POST "$URL"               -H "Content-Type: application/json"               -d "$PAYLOAD" || true)
+            echo "$URL -> HTTP $STATUS"
+            cat /tmp/global-registry.json || true
+            echo
+            case "$STATUS" in
+              200|201|202|409|422)
+                echo "Global registry ingest accepted at $URL"
+                exit 0
+                ;;
+            esac
+          done
+          echo "::warning::Global A2A Registry documents POST /public/ingest, but the live routes did not accept it. Core A2A health remains green."
+          exit 0

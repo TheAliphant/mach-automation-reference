@@ -1,4 +1,4 @@
-name: Register MACH Agent Lab
+name: Register MACH Agent Lab Edge
 
 on:
   push:
@@ -18,21 +18,26 @@ jobs:
       - name: Verify public A2A 1.0 Agent Card
         run: |
           set -euo pipefail
-          LAB="https://mach-agent-lab-xqjtq9.v2.appdeploy.ai"
-          curl --retry 3 --retry-delay 2 -fsS "$LAB/.well-known/agent-card.json" -o /tmp/card.json
-          jq -e '.name == "MACH Agent Lab"' /tmp/card.json
+          EDGE="https://mach-agent-lab-edge.vercel.app"
+          curl --retry 3 --retry-delay 2 -fsS "$EDGE/api/health" -o /tmp/health.json
+          jq -e '.productionConnected == false' /tmp/health.json
+          jq -e '.a2a.protocolVersion == "1.0"' /tmp/health.json
+          jq -e '.a2a.sendMessage == true' /tmp/health.json
+          curl --retry 3 --retry-delay 2 -fsS "$EDGE/.well-known/agent-card.json" -o /tmp/card.json
+          jq -e '.name == "MACH Agent Lab Edge"' /tmp/card.json
+          jq -e '.supportedInterfaces[0].url == "https://mach-agent-lab-edge.vercel.app/api/a2a"' /tmp/card.json
           jq -e '.supportedInterfaces[0].protocolBinding == "HTTP+JSON"' /tmp/card.json
           jq -e '.supportedInterfaces[0].protocolVersion == "1.0"' /tmp/card.json
           jq -e '.capabilities.streaming == false' /tmp/card.json
 
-      - name: Verify A2A SendMessage evidence
+      - name: Verify external A2A SendMessage
         run: |
           set -euo pipefail
-          LAB="https://mach-agent-lab-xqjtq9.v2.appdeploy.ai"
+          EDGE="https://mach-agent-lab-edge.vercel.app"
           cat >/tmp/request.json <<'JSON'
           {
             "message": {
-              "messageId": "github-verification-1",
+              "messageId": "sidecar-external-verification-1",
               "role": "ROLE_USER",
               "parts": [
                 {
@@ -42,20 +47,32 @@ jobs:
               ]
             },
             "metadata": {
-              "client": "canonical",
-              "source": "github-registration-verification"
+              "source": "mach-automation-reference-external-verifier"
             }
           }
           JSON
-          curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             --data-binary @/tmp/request.json             "$LAB/api/a2a/message:send"             -o /tmp/a2a-response.json
+          curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             -H "A2A-Version: 1.0"             --data-binary @/tmp/request.json             "$EDGE/api/a2a/message:send"             -o /tmp/a2a-response.json
+          cat /tmp/a2a-response.json
           jq -e '.message.role == "ROLE_AGENT"' /tmp/a2a-response.json
+          jq -e '.message.metadata.a2aProtocolVersion == "1.0"' /tmp/a2a-response.json
           jq -e '.message.parts[0].data.productionConnected == false' /tmp/a2a-response.json
           jq -e '.message.parts[0].data.results | length > 0' /tmp/a2a-response.json
+          jq -e '.message.parts[0].data.results[0].id == "lab.mock.json-normalize"' /tmp/a2a-response.json
+
+      - name: Verify production execution is blocked
+        run: |
+          set -euo pipefail
+          EDGE="https://mach-agent-lab-edge.vercel.app"
+          STATUS=$(curl -sS -o /tmp/execute.json -w "%{http_code}"             -X POST "$EDGE/api/execute")
+          cat /tmp/execute.json
+          test "$STATUS" = "503"
+          jq -e '.productionConnected == false' /tmp/execute.json
+          jq -e '.error == "production_execution_disabled"' /tmp/execute.json
 
       - name: Register at a2aregistry.org
         run: |
           set -euo pipefail
-          URI="https://mach-agent-lab-xqjtq9.v2.appdeploy.ai/.well-known/agent-card.json"
+          URI="https://mach-agent-lab-edge.vercel.app/.well-known/agent-card.json"
           PAYLOAD=$(jq -nc --arg uri "$URI" '{wellKnownURI:$uri}')
           STATUS=$(curl -sS -o /tmp/registry-response.json -w "%{http_code}"             -X POST "https://a2aregistry.org/api/agents/register"             -H "Content-Type: application/json"             -d "$PAYLOAD")
           cat /tmp/registry-response.json || true

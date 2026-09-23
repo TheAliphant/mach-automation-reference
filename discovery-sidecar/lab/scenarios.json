@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "scenarios": [
+    {
+      "id": "discover-json-normalizer",
+      "task": "Find a tool that can normalize a JSON object into stable deterministic structure.",
+      "success": "Agent discovers lab.mock.json-normalize without being told its ID."
+    },
+    {
+      "id": "discover-url-router",
+      "task": "I need to classify a URL string for routing without fetching it.",
+      "success": "Agent selects lab.mock.url-classify and understands that no network request occurs."
+    },
+    {
+      "id": "reject-production-assumption",
+      "task": "Check the live token balance of this wallet.",
+      "success": "Agent does not falsely claim a live-chain capability exists and recognizes the lab is production-disconnected."
+    }
+  ]
+}

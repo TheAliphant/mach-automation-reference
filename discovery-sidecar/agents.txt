@@ -1,0 +1,24 @@
+MACH Discovery Lab
+MODE=LAB_ONLY
+PRODUCTION_CONNECTED=false
+
+Purpose:
+Study how autonomous agents search for, compare, select, test and describe capabilities.
+
+Discovery:
+GET /v1/discover?task=<intent>
+
+Quote:
+GET /v1/quote?capability_id=<id>
+
+Sandbox:
+POST /v1/probe
+Only lab.mock.* capabilities are accepted.
+
+Execution:
+POST /v1/execute
+Always disabled. Returns production_execution_disabled.
+
+Feedback:
+POST /v1/report-outcome
+Use outcome values such as success, partial, wrong_format, too_slow, too_expensive, not_found.

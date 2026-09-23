@@ -29,11 +29,19 @@ jobs:
             -H "Content-Type: application/json" \
             --data-binary "$MCP_PAYLOAD")
           echo "Neuronto MCP submit HTTP $MCP_STATUS"
-          jq -c '{status:(.status // null),id:(.id // .submissionId // .submission_id // null),toolCount:(.toolCount // .tools // null),endpoint:(.endpoint // null)}' /tmp/mcp-submit.json || true
+          jq -c '{
+            status:(.status // null),
+            id:(.submission.id // .id // .submissionId // .submission_id // null),
+            endpoint:(.endpoint // null),
+            reason:(.reason // null),
+            detail:(.detail // null),
+            retryStatusUrl:(.retry.status_url // .submission.status_url // null),
+            evidenceStatus:(.evidence.status // .evidence.http_status // null)
+          }' /tmp/mcp-submit.json || true
           case "$MCP_STATUS" in
             200) ;;
             202)
-              MCP_ID=$(jq -r '.id // .submissionId // .submission_id // empty' /tmp/mcp-submit.json)
+              MCP_ID=$(jq -r '.submission.id // .id // .submissionId // .submission_id // empty' /tmp/mcp-submit.json)
               if [ -n "$MCP_ID" ]; then
                 for attempt in $(seq 1 12); do
                   MS=$(curl -sS -o /tmp/mcp-status.json -w "%{http_code}" "https://neuronto.com/submit/status/$MCP_ID")
@@ -162,8 +170,8 @@ jobs:
               continue
             fi
             TRANK=$(jq -r '
-              [(.tools // .results // .items // [])[] |
-                {name:(.name // .tool.name // ""), endpoint:(.endpoint // .server.url // .serverUrl // ""), server:(.server // .serverName // "")}] |
+              [(.results // .tools // .items // [])[] |
+                {name:(.tool // .name // ""), endpoint:(.endpoint // ""), server:(.server // "")}] |
               to_entries |
               map(select(
                 (.value.name == "normalize_json") or
@@ -174,6 +182,6 @@ jobs:
               )) |
               if length>0 then (.[0].key+1) else 0 end
             ' /tmp/tools.json)
-            TCOUNT=$(jq -r '(.tools // .results // .items // []) | length' /tmp/tools.json)
+            TCOUNT=$(jq -r '(.results // .tools // .items // []) | length' /tmp/tools.json)
             echo "NEURONTO_TOOL | query=$Q | rank=$TRANK | page_results=$TCOUNT"
           done

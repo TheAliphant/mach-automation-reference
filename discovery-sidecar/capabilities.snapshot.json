@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "mode": "lab_only",
+  "production_connected": false,
+  "generated_from": "manual_lab_fixtures",
+  "capabilities": [
+    {
+      "id": "lab.mock.json-normalize",
+      "canonical_name": "Normalize JSON",
+      "status": "lab_only",
+      "tags": ["json", "normalize", "validate", "structure"],
+      "price_usd": 0,
+      "typical_latency_ms": 5,
+      "descriptions": {
+        "canonical": "Normalize a JSON object into a stable deterministic key order for agent workflow testing.",
+        "claude": "Use when you need a deterministic normalized JSON object for comparison or validation.",
+        "openai": "Returns normalized JSON with stable key ordering and no external side effects.",
+        "google_adk": "Deterministic JSON normalization tool for agent workflow tests.",
+        "strands": "Local deterministic JSON normalization capability with structured output.",
+        "crewai": "Use for local JSON normalization inside a multi-agent test workflow.",
+        "cline": "Normalize JSON locally when implementing or testing structured-data flows."
+      },
+      "input_schema": {"type":"object","properties":{"value":{"type":"object"}},"required":["value"]},
+      "output_schema": {"type":"object","properties":{"normalized":{"type":"object"}},"required":["normalized"]}
+    },
+    {
+      "id": "lab.mock.url-classify",
+      "canonical_name": "Classify URL intent",
+      "status": "lab_only",
+      "tags": ["url", "classify", "intent", "routing"],
+      "price_usd": 0,
+      "typical_latency_ms": 5,
+      "descriptions": {
+        "canonical": "Classify a URL string into a small local test taxonomy without fetching the URL.",
+        "claude": "Use to classify the intent of a URL string without browsing or network access.",
+        "openai": "Classifies a URL string locally; the URL is never fetched.",
+        "google_adk": "Local URL-string classification for routing tests.",
+        "strands": "Deterministic URL intent classification with no outbound network call.",
+        "crewai": "Use as a routing helper in local multi-agent test flows.",
+        "cline": "Classify URL strings during local tool-selection and routing tests."
+      },
+      "input_schema": {"type":"object","properties":{"url":{"type":"string"}},"required":["url"]},
+      "output_schema": {"type":"object","properties":{"category":{"type":"string"}},"required":["category"]}
+    },
+    {
+      "id": "lab.mock.wallet-format",
+      "canonical_name": "Validate wallet-address format",
+      "status": "lab_only",
+      "tags": ["wallet", "address", "validate", "format"],
+      "price_usd": 0,
+      "typical_latency_ms": 5,
+      "descriptions": {
+        "canonical": "Validate the format of a wallet-address string locally; no chain lookup is performed.",
+        "claude": "Use only for local address-format validation; this does not query a blockchain.",
+        "openai": "Performs local string-format validation only and returns structured validation output.",
+        "google_adk": "Local wallet-address format validator for agent workflow testing.",
+        "strands": "Deterministic wallet-address format validation without RPC/network access.",
+        "crewai": "Use when an agent crew needs a local preflight format check.",
+        "cline": "Check address formatting locally before code or integration tests."
+      },
+      "input_schema": {"type":"object","properties":{"address":{"type":"string"}},"required":["address"]},
+      "output_schema": {"type":"object","properties":{"valid_format":{"type":"boolean"}},"required":["valid_format"]}
+    }
+  ]
+}

@@ -1,30 +1,42 @@
 {
-  "name": "MACH Discovery Lab",
-  "description": "Independent lab-only service-agent shell for studying agent discovery, tool selection and communication. It does not execute MACH production services.",
-  "version": "0.1.0",
-  "experimental": true,
-  "production_connected": false,
-  "url": "http://127.0.0.1:8787/a2a",
+  "name": "MACH Agent Lab",
+  "description": "Production-disconnected research agent for studying capability discovery and selection. It can search lab-only deterministic fixtures; it cannot execute MACH production services or make payments.",
+  "supportedInterfaces": [
+    {
+      "url": "https://mach-agent-lab-xqjtq9.v2.appdeploy.ai/api/a2a",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "version": "0.2.0",
+  "documentationUrl": "https://mach-agent-lab-xqjtq9.v2.appdeploy.ai/",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "extendedAgentCard": false
+  },
+  "defaultInputModes": [
+    "text/plain",
+    "application/json"
+  ],
+  "defaultOutputModes": [
+    "application/json"
+  ],
   "skills": [
     {
       "id": "discover-capability",
-      "name": "Discover capability",
-      "description": "Find matching lab-only capabilities from a local static catalog."
-    },
-    {
-      "id": "quote-capability",
-      "name": "Quote capability",
-      "description": "Return local catalog price and latency metadata."
-    },
-    {
-      "id": "sandbox-probe",
-      "name": "Sandbox probe",
-      "description": "Run a deterministic local fixture. Never calls production."
-    },
-    {
-      "id": "report-outcome",
-      "name": "Report outcome",
-      "description": "Record structured local feedback about discovery or probe outcomes."
+      "name": "Discover lab capability",
+      "description": "Searches a production-disconnected fixture catalog from natural-language intent and returns ranked structured candidates.",
+      "tags": [
+        "discovery",
+        "agent-tools",
+        "capabilities",
+        "lab-only"
+      ],
+      "examples": [
+        "Find a tool that can normalize JSON",
+        "I need to classify a URL without fetching it"
+      ]
     }
   ]
 }

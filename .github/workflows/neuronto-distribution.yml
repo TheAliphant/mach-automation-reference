@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/neuronto-distribution.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "41 */6 * * *"
 
 permissions:
   contents: read

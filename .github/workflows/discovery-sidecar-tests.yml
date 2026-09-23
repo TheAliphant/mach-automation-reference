@@ -1,0 +1,35 @@
+name: Discovery Sidecar Isolation Tests
+
+on:
+  push:
+    branches:
+      - discovery-sidecar-v1
+    paths:
+      - "discovery-sidecar/**"
+      - ".github/workflows/discovery-sidecar-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: discovery-sidecar
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate JSON assets
+        run: |
+          python3 -m json.tool capabilities.snapshot.json >/dev/null
+          python3 -m json.tool agent-card.json >/dev/null
+          python3 -m json.tool openapi.json >/dev/null
+          python3 -m json.tool telemetry/schema.json >/dev/null
+      - name: Run isolation and logic tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Verify Agent Lab is offline-only
+        run: python3 lab/runner.py >/tmp/agent-lab-prompts.json

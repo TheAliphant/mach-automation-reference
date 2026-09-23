@@ -104,4 +104,17 @@ jobs:
             COVERAGE=$(jq -r '.queryMatch.coverage // null' /tmp/search.json)
             CONFIDENCE=$(jq -r '.queryMatch.confidence // null' /tmp/search.json)
             echo "NEURONTO | query=$Q | rank=$RANK | page_results=$COUNT | coverage=$COVERAGE | confidence=$CONFIDENCE"
+            if [ "$RANK" = "0" ] || [ "$RANK" -gt 3 ]; then
+              echo "NEURONTO_TOP | query=$Q"
+              jq -c '[((.entries // .results // .items // [])[0:10])[] | {
+                rank:(input_line_number),
+                identifier:(.identifier // .entry.identifier // null),
+                displayName:(.displayName // .entry.displayName // null),
+                description:(.description // .entry.description // null),
+                representativeQueries:(.representativeQueries // .entry.representativeQueries // []),
+                capabilities:(.capabilities // .entry.capabilities // []),
+                score:(.score // null),
+                source:(.source // null)
+              }]' /tmp/search.json || true
+            fi
           done

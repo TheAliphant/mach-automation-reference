@@ -1,0 +1,40 @@
+name: Announce MACH Agent Lab to Wellknown
+
+on:
+  push:
+    branches:
+      - discovery-sidecar-v1
+    paths:
+      - ".github/workflows/announce-wellknown.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify ARD manifest
+        run: |
+          set -euo pipefail
+          EDGE="https://mach-agent-lab-edge.vercel.app"
+          curl --retry 3 --retry-delay 2 -fsS "$EDGE/.well-known/ard.json" -o /tmp/ard.json
+          jq -e '.entries | length == 1' /tmp/ard.json
+          jq -e '.entries[0].identifier == "urn:air:mach-agent-lab-edge.vercel.app:agent:mach-agent-lab-edge"' /tmp/ard.json
+          jq -e '.entries[0].type == "application/a2a-agent-card+json"' /tmp/ard.json
+          jq -e '.entries[0].representativeQueries | length >= 2' /tmp/ard.json
+          jq -e '.entries[0].metadata.productionConnected == false' /tmp/ard.json
+
+      - name: Announce Agent Card to Wellknown
+        run: |
+          set -euo pipefail
+          CARD="https://mach-agent-lab-edge.vercel.app/.well-known/agent-card.json"
+          PAYLOAD=$(jq -nc --arg cardUrl "$CARD" '{cardUrl:$cardUrl}')
+          STATUS=$(curl -sS -o /tmp/wellknown.json -w "%{http_code}"             -X POST "https://wellknown.network/api/v1/submit"             -H "Content-Type: application/json"             -d "$PAYLOAD")
+          cat /tmp/wellknown.json || true
+          echo "Wellknown HTTP $STATUS"
+          case "$STATUS" in
+            200|201|202|409) exit 0 ;;
+            *) exit 1 ;;
+          esac

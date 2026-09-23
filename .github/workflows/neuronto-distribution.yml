@@ -15,72 +15,54 @@ jobs:
   publish-and-benchmark:
     runs-on: ubuntu-latest
     steps:
-      - name: Submit ARD publishing domain
-        id: submit
+      - name: Submit, audit and benchmark ARD
         run: |
           set -euo pipefail
           DOMAIN="mach-agent-lab-edge.vercel.app"
-          STATUS=$(curl -sS -o /tmp/submit.json -w "%{http_code}"             -X POST "https://neuronto.com/submit"             -H "Content-Type: application/json"             -d "{"domain":"$DOMAIN"}")
+
+          PAYLOAD=$(jq -nc --arg domain "$DOMAIN" '{domain:$domain}')
+          STATUS=$(curl -sS -o /tmp/submit.json -w "%{http_code}" \
+            -X POST "https://neuronto.com/submit" \
+            -H "Content-Type: application/json" \
+            --data-binary "$PAYLOAD")
           echo "Neuronto submit HTTP $STATUS"
-          jq -c '{
-            status:(.status // null),
-            id:(.id // .submissionId // .submission_id // null),
-            indexed:(.indexed // null),
-            entries:(.entries // .entryCount // null)
-          }' /tmp/submit.json || true
+          jq -c '{status:(.status // null),id:(.id // .submissionId // .submission_id // null),indexed:(.indexed // null),entries:(.entries // .entryCount // null)}' /tmp/submit.json || true
+
           case "$STATUS" in
-            200|202) ;;
+            200) ;;
+            202)
+              ID=$(jq -r '.id // .submissionId // .submission_id // empty' /tmp/submit.json)
+              if [ -n "$ID" ]; then
+                for attempt in $(seq 1 12); do
+                  S=$(curl -sS -o /tmp/status.json -w "%{http_code}" "https://neuronto.com/submit/status/$ID")
+                  if [ "$S" = "200" ]; then
+                    STATE=$(jq -r '.status // .state // empty' /tmp/status.json)
+                    echo "Neuronto state: $STATE"
+                    case "$STATE" in
+                      indexed|verified|complete|completed|success) break ;;
+                      failed|rejected|exhausted) cat /tmp/status.json; exit 1 ;;
+                    esac
+                  fi
+                  sleep 5
+                done
+              fi
+              ;;
             *)
               jq -c '{detail:(.detail // .error // .message // null)}' /tmp/submit.json || true
               exit 1
               ;;
           esac
-          ID=$(jq -r '.id // .submissionId // .submission_id // empty' /tmp/submit.json)
-          echo "submission_id=$ID" >> "$GITHUB_OUTPUT"
 
-      - name: Poll pending submission
-        if: steps.submit.outputs.submission_id != ''
-        run: |
-          set -euo pipefail
-          ID="${{ steps.submit.outputs.submission_id }}"
-          for attempt in $(seq 1 12); do
-            STATUS=$(curl -sS -o /tmp/status.json -w "%{http_code}"               "https://neuronto.com/submit/status/$ID")
-            if [ "$STATUS" = "200" ]; then
-              STATE=$(jq -r '.status // .state // empty' /tmp/status.json)
-              echo "Neuronto submission state: $STATE"
-              case "$STATE" in
-                indexed|verified|complete|completed|success) exit 0 ;;
-                failed|rejected|exhausted) exit 1 ;;
-              esac
-            fi
-            sleep 5
-          done
-          echo "Submission remains pending; Neuronto will continue retrying it."
-          exit 0
+          AUDIT_PAYLOAD=$(jq -nc --arg domain "$DOMAIN" '{domain:$domain}')
+          AUDIT_STATUS=$(curl -sS -o /tmp/audit.json -w "%{http_code}" \
+            -X POST "https://neuronto.com/audit" \
+            -H "Content-Type: application/json" \
+            --data-binary "$AUDIT_PAYLOAD")
+          echo "Neuronto audit HTTP $AUDIT_STATUS"
+          if [ "$AUDIT_STATUS" = "200" ]; then
+            jq -c '{manifestReachable:(.manifest.reachable // .discovery.manifestReachable // null),conformant:(.conformant // .manifest.conformant // null),entryCount:(.entryCount // ((.entries // [])|length))}' /tmp/audit.json || true
+          fi
 
-      - name: Audit public discovery
-        run: |
-          set -euo pipefail
-          STATUS=$(curl -sS -o /tmp/audit.json -w "%{http_code}"             -X POST "https://neuronto.com/audit"             -H "Content-Type: application/json"             -d '{"domain":"mach-agent-lab-edge.vercel.app"}')
-          echo "Neuronto audit HTTP $STATUS"
-          case "$STATUS" in
-            200)
-              jq -c '{
-                manifestReachable:(.manifest.reachable // .discovery.manifestReachable // null),
-                conformant:(.conformant // .manifest.conformant // null),
-                entryCount:(.entryCount // (.entries|length?) // null)
-              }' /tmp/audit.json || true
-              ;;
-            429|402|503)
-              echo "Audit temporarily unavailable; submission/search still continue."
-              ;;
-            *) exit 1 ;;
-          esac
-
-      - name: Benchmark local Neuronto search
-        run: |
-          set -euo pipefail
-          DOMAIN="mach-agent-lab-edge.vercel.app"
           QUERIES=(
             "normalize JSON"
             "classify a URL without fetching"
@@ -88,26 +70,21 @@ jobs:
             "lab-only A2A agent for capability discovery"
           )
           for Q in "${QUERIES[@]}"; do
-            PAYLOAD=$(jq -nc --arg q "$Q" '{query:{text:$q},"federation":"none","pageSize":20}')
-            STATUS=$(curl -sS -o /tmp/search.json -w "%{http_code}"               -X POST "https://neuronto.com/search"               -H "Content-Type: application/json"               -d "$PAYLOAD")
-            if [ "$STATUS" != "200" ]; then
-              echo "NEURONTO | query=$Q | http=$STATUS"
+            SEARCH_PAYLOAD=$(jq -nc --arg q "$Q" '{query:{text:$q},federation:"none",pageSize:20}')
+            SEARCH_STATUS=$(curl -sS -o /tmp/search.json -w "%{http_code}" \
+              -X POST "https://neuronto.com/search" \
+              -H "Content-Type: application/json" \
+              --data-binary "$SEARCH_PAYLOAD")
+            if [ "$SEARCH_STATUS" != "200" ]; then
+              echo "NEURONTO | query=$Q | http=$SEARCH_STATUS"
               continue
             fi
             RANK=$(jq -r --arg domain "$DOMAIN" '
               [(.entries // .results // .items // [])[] |
-                {
-                  id:(.identifier // .entry.identifier // ""),
-                  url:(.url // .entry.url // ""),
-                  name:(.displayName // .entry.displayName // "")
-                }] |
+                {id:(.identifier // .entry.identifier // ""),url:(.url // .entry.url // ""),name:(.displayName // .entry.displayName // "")}] |
               to_entries |
-              map(select(
-                (.value.id | contains($domain)) or
-                (.value.url | contains($domain)) or
-                (.value.name == "MACH Agent Lab Edge")
-              )) |
-              if length > 0 then (.[0].key + 1) else 0 end
+              map(select((.value.id|contains($domain)) or (.value.url|contains($domain)) or (.value.name=="MACH Agent Lab Edge"))) |
+              if length>0 then (.[0].key+1) else 0 end
             ' /tmp/search.json)
             COUNT=$(jq -r '(.entries // .results // .items // []) | length' /tmp/search.json)
             COVERAGE=$(jq -r '.queryMatch.coverage // null' /tmp/search.json)

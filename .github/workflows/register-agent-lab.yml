@@ -1,0 +1,66 @@
+name: Register MACH Agent Lab
+
+on:
+  push:
+    branches:
+      - discovery-sidecar-v1
+    paths:
+      - ".github/workflows/register-agent-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-register:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify public A2A 1.0 Agent Card
+        run: |
+          set -euo pipefail
+          LAB="https://mach-agent-lab-xqjtq9.v2.appdeploy.ai"
+          curl --retry 3 --retry-delay 2 -fsS "$LAB/.well-known/agent-card.json" -o /tmp/card.json
+          jq -e '.name == "MACH Agent Lab"' /tmp/card.json
+          jq -e '.supportedInterfaces[0].protocolBinding == "HTTP+JSON"' /tmp/card.json
+          jq -e '.supportedInterfaces[0].protocolVersion == "1.0"' /tmp/card.json
+          jq -e '.capabilities.streaming == false' /tmp/card.json
+
+      - name: Verify A2A SendMessage evidence
+        run: |
+          set -euo pipefail
+          LAB="https://mach-agent-lab-xqjtq9.v2.appdeploy.ai"
+          cat >/tmp/request.json <<'JSON'
+          {
+            "message": {
+              "messageId": "github-verification-1",
+              "role": "ROLE_USER",
+              "parts": [
+                {
+                  "text": "Find a capability that can normalize JSON",
+                  "mediaType": "text/plain"
+                }
+              ]
+            },
+            "metadata": {
+              "client": "canonical",
+              "source": "github-registration-verification"
+            }
+          }
+          JSON
+          curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             --data-binary @/tmp/request.json             "$LAB/api/a2a/message:send"             -o /tmp/a2a-response.json
+          jq -e '.message.role == "ROLE_AGENT"' /tmp/a2a-response.json
+          jq -e '.message.parts[0].data.productionConnected == false' /tmp/a2a-response.json
+          jq -e '.message.parts[0].data.results | length > 0' /tmp/a2a-response.json
+
+      - name: Register at a2aregistry.org
+        run: |
+          set -euo pipefail
+          URI="https://mach-agent-lab-xqjtq9.v2.appdeploy.ai/.well-known/agent-card.json"
+          PAYLOAD=$(jq -nc --arg uri "$URI" '{wellKnownURI:$uri}')
+          STATUS=$(curl -sS -o /tmp/registry-response.json -w "%{http_code}"             -X POST "https://a2aregistry.org/api/agents/register"             -H "Content-Type: application/json"             -d "$PAYLOAD")
+          cat /tmp/registry-response.json || true
+          echo "HTTP $STATUS"
+          case "$STATUS" in
+            200|201|202|409) exit 0 ;;
+            *) exit 1 ;;
+          esac

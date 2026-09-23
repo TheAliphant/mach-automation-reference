@@ -30,7 +30,10 @@ jobs:
           }' /tmp/submit.json || true
           case "$STATUS" in
             200|202) ;;
-            *) exit 1 ;;
+            *)
+              jq -c '{detail:(.detail // .error // .message // null)}' /tmp/submit.json || true
+              exit 1
+              ;;
           esac
           ID=$(jq -r '.id // .submissionId // .submission_id // empty' /tmp/submit.json)
           echo "submission_id=$ID" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,17 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MACH Discovery Lab",
+    "version": "0.1.0",
+    "description": "Independent lab-only discovery sidecar. No MACH production connectivity."
+  },
+  "servers": [{"url":"http://127.0.0.1:8787"}],
+  "paths": {
+    "/health": {"get":{"responses":{"200":{"description":"Sidecar health"}}}},
+    "/v1/discover": {"get":{"parameters":[{"name":"task","in":"query","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Matching lab capabilities"}}}},
+    "/v1/quote": {"get":{"parameters":[{"name":"capability_id","in":"query","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Static lab quote"}}}},
+    "/v1/probe": {"post":{"responses":{"200":{"description":"Deterministic local sandbox result"},"429":{"description":"Rate limited"}}}},
+    "/v1/report-outcome": {"post":{"responses":{"202":{"description":"Feedback stored locally"}}}},
+    "/v1/execute": {"post":{"responses":{"503":{"description":"Production execution intentionally disabled"}}}}
+  }
+}

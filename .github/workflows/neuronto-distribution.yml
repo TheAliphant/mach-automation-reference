@@ -65,6 +65,18 @@ jobs:
             jq -c '{manifestReachable:(.manifest.reachable // .discovery.manifestReachable // null),conformant:(.conformant // .manifest.conformant // null),entryCount:(.entryCount // ((.entries // [])|length))}' /tmp/audit.json || true
           fi
 
+          echo "--- Neuronto publisher index state ---"
+          AGENTS_STATUS=$(curl -sS -G -o /tmp/agents.json -w "%{http_code}" \
+            --data-urlencode "filter=publisher=$DOMAIN" \
+            --data-urlencode "pageSize=100" \
+            "https://neuronto.com/agents")
+          echo "Neuronto agents HTTP $AGENTS_STATUS"
+          if [ "$AGENTS_STATUS" = "200" ]; then
+            jq -c '{totalSize:(.totalSize // null),count:((.items // [])|length),items:[(.items // [])[] | {identifier,displayName,type,url,representativeQueries,tags,capabilities}]}' /tmp/agents.json
+          fi
+
+          echo "--- Neuronto audit shape ---"
+          jq -c '{keys:(keys), manifest:(.manifest // null), discovery:(.discovery // null), entries:(.entries // null), representativeQueries:(.representativeQueries // null)}' /tmp/audit.json || true
           QUERIES=(
             "normalize JSON"
             "classify a URL without fetching"

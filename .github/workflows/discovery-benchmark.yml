@@ -15,6 +15,17 @@ jobs:
   benchmark:
     runs-on: ubuntu-latest
     steps:
+      - name: Read public Wellknown record state
+        run: |
+          set -euo pipefail
+          curl -fsS "https://wellknown.network/api/v1/agents/mach-agent-lab-edge" -o /tmp/record.json
+          jq -c '{
+            handle:(.handle // .id // null),
+            observedStatus:(.observed.status // null),
+            claimed:(.verification.claimed // .verification.verified // false),
+            skillCount:((.declared.skills // .skills // []) | length)
+          }' /tmp/record.json
+
       - name: Benchmark Wellknown natural-language search
         run: |
           set -euo pipefail
@@ -30,7 +41,8 @@ jobs:
             ENCODED=$(jq -rn --arg v "$Q" '$v|@uri')
             curl -fsS "https://wellknown.network/api/v1/search?q=$ENCODED&limit=20" -o /tmp/search.json
             RANK=$(jq -r --arg h "$HANDLE" '
-              [(.results // .items // .agents // [])[] | (.handle // .agent.handle // .id // "")] |
+              [(.results // .items // .agents // [])[] |
+                (.handle // .agent.handle // .id // .record.handle // "")] |
               to_entries |
               map(select(.value == $h)) |
               if length > 0 then (.[0].key + 1) else 0 end
@@ -42,7 +54,7 @@ jobs:
       - name: Benchmark Wellknown ARD search
         run: |
           set -euo pipefail
-          IDENTIFIER="urn:air:mach-agent-lab-edge.vercel.app:agent:mach-agent-lab-edge"
+          NAME="MACH Agent Lab Edge"
           QUERIES=(
             "normalize JSON"
             "classify URL without fetching"
@@ -52,15 +64,26 @@ jobs:
 
           for Q in "${QUERIES[@]}"; do
             PAYLOAD=$(jq -nc --arg q "$Q" '{
-              query:{text:$q,filter:{type:["application/a2a-agent-card+json"]}},
-              federation:"local",
+              query:{
+                text:$q,
+                filter:{type:["application/a2a-agent-card+json"]}
+              },
+              federation:"referrals",
               pageSize:20
             }')
-            curl -fsS               -X POST "https://wellknown.network/ard/search"               -H "Content-Type: application/json"               -d "$PAYLOAD"               -o /tmp/ard-search.json
-            RANK=$(jq -r --arg id "$IDENTIFIER" '
-              [(.entries // .results // .items // [])[] | (.identifier // .entry.identifier // "")] |
+            STATUS=$(curl -sS -o /tmp/ard-search.json -w "%{http_code}"               -X POST "https://wellknown.network/ard/search"               -H "Content-Type: application/json"               -d "$PAYLOAD")
+            if [ "$STATUS" != "200" ]; then
+              echo "ARD | query=$Q | http=$STATUS"
+              continue
+            fi
+            RANK=$(jq -r --arg n "$NAME" '
+              [(.entries // .results // .items // [])[] |
+                {
+                  name:(.displayName // .entry.displayName // .name // ""),
+                  url:(.url // .entry.url // "")
+                }] |
               to_entries |
-              map(select(.value == $id)) |
+              map(select(.value.name == $n or (.value.url | contains("mach-agent-lab-edge")))) |
               if length > 0 then (.[0].key + 1) else 0 end
             ' /tmp/ard-search.json)
             COUNT=$(jq -r '(.entries // .results // .items // []) | length' /tmp/ard-search.json)

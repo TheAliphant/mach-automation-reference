@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/register-agent-lab.yml"
   workflow_dispatch:
+  schedule:
+    - cron: "23 * * * *"
 
 permissions:
   contents: read
@@ -53,7 +55,6 @@ jobs:
           }
           JSON
           curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             -H "A2A-Version: 1.0"             --data-binary @/tmp/http-request.json             "$EDGE/api/a2a/message:send"             -o /tmp/http-response.json
-          cat /tmp/http-response.json
           jq -e '.message.role == "ROLE_AGENT"' /tmp/http-response.json
           jq -e '.message.metadata.a2aProtocolVersion == "1.0"' /tmp/http-response.json
           jq -e '.message.parts[0].data.productionConnected == false' /tmp/http-response.json
@@ -86,7 +87,6 @@ jobs:
           }
           JSON
           curl --retry 3 --retry-delay 2 -fsS             -H "Content-Type: application/json"             -H "A2A-Version: 1.0"             --data-binary @/tmp/rpc-request.json             "$EDGE/api/jsonrpc"             -o /tmp/rpc-response.json
-          cat /tmp/rpc-response.json
           jq -e '.jsonrpc == "2.0"' /tmp/rpc-response.json
           jq -e '.id == "sidecar-jsonrpc-verification-1"' /tmp/rpc-response.json
           jq -e '.result.message.role == "ROLE_AGENT"' /tmp/rpc-response.json
@@ -99,7 +99,6 @@ jobs:
           set -euo pipefail
           EDGE="https://mach-agent-lab-edge.vercel.app"
           STATUS=$(curl -sS -o /tmp/execute.json -w "%{http_code}"             -X POST "$EDGE/api/execute")
-          cat /tmp/execute.json
           test "$STATUS" = "503"
           jq -e '.productionConnected == false' /tmp/execute.json
           jq -e '.error == "production_execution_disabled"' /tmp/execute.json
@@ -111,8 +110,21 @@ jobs:
           PAYLOAD=$(jq -nc --arg uri "$URI" '{wellKnownURI:$uri}')
           STATUS=$(curl -sS -o /tmp/registry-response.json -w "%{http_code}"             -X POST "https://a2aregistry.org/api/agents/register"             -H "Content-Type: application/json"             -d "$PAYLOAD")
           cat /tmp/registry-response.json || true
-          echo "HTTP $STATUS"
+          echo "a2aregistry.org HTTP $STATUS"
           case "$STATUS" in
             200|201|202|409) exit 0 ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Ingest at Global A2A Registry
+        run: |
+          set -euo pipefail
+          MANIFEST="https://mach-agent-lab-edge.vercel.app/.well-known/agent-card.json"
+          PAYLOAD=$(jq -nc --arg manifestUrl "$MANIFEST" '{manifestUrl:$manifestUrl}')
+          STATUS=$(curl -sS -o /tmp/global-registry.json -w "%{http_code}"             -X POST "https://api.a2a-registry.org/public/ingest"             -H "Content-Type: application/json"             -d "$PAYLOAD")
+          cat /tmp/global-registry.json || true
+          echo "Global A2A Registry HTTP $STATUS"
+          case "$STATUS" in
+            200|201|202|409|422) exit 0 ;;
             *) exit 1 ;;
           esac

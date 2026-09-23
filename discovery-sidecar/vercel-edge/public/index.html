@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MACH Agent Lab Edge</title>
+  <style>
+    body{margin:0;background:#080b0d;color:#eef2f7;font:16px/1.5 system-ui,-apple-system,sans-serif}
+    main{max-width:900px;margin:auto;padding:64px 24px}
+    h1{font-size:64px;letter-spacing:-.05em;margin:16px 0}
+    p{color:#9aa5aa;max-width:700px}
+    .pill{display:inline-block;border:1px solid #31523b;background:#0b1810;color:#b7f5c7;border-radius:999px;padding:6px 10px;margin-right:8px}
+    code{display:block;background:#101519;border:1px solid #242d31;border-radius:10px;padding:14px;margin:10px 0;color:#a9cbb6}
+  </style>
+</head>
+<body>
+  <main>
+    <span class="pill">LAB_ONLY</span><span class="pill">A2A 1.0</span>
+    <h1>MACH Agent Lab Edge</h1>
+    <p>Stateless, production-disconnected A2A discovery surface. No MACH production endpoints, wallets, payments or credentials are connected.</p>
+    <code>GET /.well-known/agent-card.json</code>
+    <code>POST /api/a2a/message:send</code>
+    <code>GET /api/health</code>
+    <code>POST /api/execute → always HTTP 503</code>
+  </main>
+</body>
+</html>

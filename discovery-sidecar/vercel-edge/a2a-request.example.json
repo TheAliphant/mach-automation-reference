@@ -1,0 +1,15 @@
+{
+  "message": {
+    "messageId": "external-agent-test-1",
+    "role": "ROLE_USER",
+    "parts": [
+      {
+        "text": "Find a capability that can normalize JSON",
+        "mediaType": "text/plain"
+      }
+    ]
+  },
+  "metadata": {
+    "source": "external-agent-test"
+  }
+}

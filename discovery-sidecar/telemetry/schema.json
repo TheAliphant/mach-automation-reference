@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MACH Discovery Lab Event",
+  "type": "object",
+  "properties": {
+    "event_id": {"type":"string"},
+    "timestamp_unix": {"type":"integer"},
+    "production_connected": {"const": false},
+    "discovery_source": {"type":"string"},
+    "agent_family": {"type":"string"},
+    "agent_runtime": {"type":"string"},
+    "client": {"type":"string"},
+    "user_agent": {"type":"string"},
+    "capability_id": {"type":"string"},
+    "query_intent": {"type":"string"},
+    "stage": {"enum":["impression","inspection","discovery","probe","quote","purchase","execution","success","feedback","execute_blocked"]},
+    "outcome": {"type":"string"},
+    "price_usd": {"type":"number"},
+    "latency_ms": {"type":"number"},
+    "error": {"type":"string"},
+    "repeat_window": {"type":"string"}
+  },
+  "required": ["production_connected", "stage"]
+}

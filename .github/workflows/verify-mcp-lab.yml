@@ -1,0 +1,80 @@
+name: Verify MACH Agent Lab MCP
+
+on:
+  push:
+    branches:
+      - discovery-sidecar-v1
+    paths:
+      - ".github/workflows/verify-mcp-lab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify tools/list from outside Vercel
+        run: |
+          set -euo pipefail
+          MCP="https://mach-agent-lab-edge.vercel.app/api/mcp"
+          STATUS=$(curl -sS -D /tmp/headers -o /tmp/body -w "%{http_code}"             -X POST "$MCP"             -H "Content-Type: application/json"             -H "Accept: application/json, text/event-stream"             -H "X-Mach-Source: github-mcp-verifier"             --data-binary '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          echo "tools/list HTTP $STATUS"
+          test "$STATUS" = "200"
+
+          if grep -qi '^content-type:.*text/event-stream' /tmp/headers; then
+            sed -n 's/^data: //p' /tmp/body | tail -1 > /tmp/list.json
+          else
+            cp /tmp/body /tmp/list.json
+          fi
+
+          cat /tmp/list.json
+          jq -e '.result.tools | length == 3' /tmp/list.json
+          jq -e '[.result.tools[].name] | index("normalize_json") != null' /tmp/list.json
+          jq -e '[.result.tools[].name] | index("classify_url_without_fetching") != null' /tmp/list.json
+          jq -e '[.result.tools[].name] | index("validate_evm_wallet_address_format") != null' /tmp/list.json
+          jq -e '[.result.tools[].annotations.readOnlyHint] | all' /tmp/list.json
+          jq -e '[.result.tools[].annotations.destructiveHint] | any | not' /tmp/list.json
+          jq -e '[.result.tools[].annotations.openWorldHint] | any | not' /tmp/list.json
+
+      - name: Verify all three deterministic tool calls
+        run: |
+          set -euo pipefail
+          MCP="https://mach-agent-lab-edge.vercel.app/api/mcp"
+
+          call_tool () {
+            local id="$1"
+            local name="$2"
+            local args="$3"
+            local outfile="/tmp/call-$id.raw"
+            local jsonfile="/tmp/call-$id.json"
+
+            STATUS=$(curl -sS -D "/tmp/call-$id.headers" -o "$outfile" -w "%{http_code}"               -X POST "$MCP"               -H "Content-Type: application/json"               -H "Accept: application/json, text/event-stream"               -H "X-Mach-Source: github-mcp-verifier"               --data-binary "$(jq -nc --argjson id "$id" --arg name "$name" --argjson arguments "$args"                 '{jsonrpc:"2.0",id:$id,method:"tools/call",params:{name:$name,arguments:$arguments}}')")
+            test "$STATUS" = "200"
+
+            if grep -qi '^content-type:.*text/event-stream' "/tmp/call-$id.headers"; then
+              sed -n 's/^data: //p' "$outfile" | tail -1 > "$jsonfile"
+            else
+              cp "$outfile" "$jsonfile"
+            fi
+            jq -e '.result.isError != true' "$jsonfile"
+            jq -e '.result.structuredContent.productionConnected == false' "$jsonfile"
+          }
+
+          call_tool 2 "normalize_json" '{"value":{"z":1,"a":2}}'
+          jq -e '.result.structuredContent.normalized.a == 2 and .result.structuredContent.normalized.z == 1' /tmp/call-2.json
+
+          call_tool 3 "classify_url_without_fetching" '{"url":"https://example.com/x"}'
+          jq -e '.result.structuredContent.category == "web"' /tmp/call-3.json
+
+          call_tool 4 "validate_evm_wallet_address_format" '{"address":"0x0000000000000000000000000000000000000000"}'
+          jq -e '.result.structuredContent.validFormat == true' /tmp/call-4.json
+
+      - name: Verify MACH production remains unreachable
+        run: |
+          set -euo pipefail
+          STATUS=$(curl -sS -o /tmp/execute.json -w "%{http_code}"             -X POST "https://mach-agent-lab-edge.vercel.app/api/execute")
+          test "$STATUS" = "503"
+          jq -e '.productionConnected == false' /tmp/execute.json
+          jq -e '.error == "production_execution_disabled"' /tmp/execute.json

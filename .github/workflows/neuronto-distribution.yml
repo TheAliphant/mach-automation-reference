@@ -22,6 +22,39 @@ jobs:
           set -euo pipefail
           DOMAIN="mach-agent-lab-edge.vercel.app"
 
+          MCP_ENDPOINT="https://mach-agent-lab-edge.vercel.app/api/mcp"
+          MCP_PAYLOAD=$(jq -nc --arg endpoint "$MCP_ENDPOINT" '{endpoint:$endpoint}')
+          MCP_STATUS=$(curl -sS -o /tmp/mcp-submit.json -w "%{http_code}" \
+            -X POST "https://neuronto.com/submit" \
+            -H "Content-Type: application/json" \
+            --data-binary "$MCP_PAYLOAD")
+          echo "Neuronto MCP submit HTTP $MCP_STATUS"
+          jq -c '{status:(.status // null),id:(.id // .submissionId // .submission_id // null),toolCount:(.toolCount // .tools // null),endpoint:(.endpoint // null)}' /tmp/mcp-submit.json || true
+          case "$MCP_STATUS" in
+            200) ;;
+            202)
+              MCP_ID=$(jq -r '.id // .submissionId // .submission_id // empty' /tmp/mcp-submit.json)
+              if [ -n "$MCP_ID" ]; then
+                for attempt in $(seq 1 12); do
+                  MS=$(curl -sS -o /tmp/mcp-status.json -w "%{http_code}" "https://neuronto.com/submit/status/$MCP_ID")
+                  if [ "$MS" = "200" ]; then
+                    MSTATE=$(jq -r '.status // .state // empty' /tmp/mcp-status.json)
+                    echo "Neuronto MCP state: $MSTATE"
+                    case "$MSTATE" in
+                      indexed|verified|complete|completed|success) break ;;
+                      failed|rejected|exhausted) cat /tmp/mcp-status.json; exit 1 ;;
+                    esac
+                  fi
+                  sleep 5
+                done
+              fi
+              ;;
+            *)
+              cat /tmp/mcp-submit.json || true
+              exit 1
+              ;;
+          esac
+
           PAYLOAD=$(jq -nc --arg domain "$DOMAIN" '{domain:$domain}')
           STATUS=$(curl -sS -o /tmp/submit.json -w "%{http_code}" \
             -X POST "https://neuronto.com/submit" \
@@ -117,4 +150,30 @@ jobs:
                 source:(.source // null)
               }]' /tmp/search.json || true
             fi
+          done
+
+          echo "--- Neuronto verified tool search ---"
+          TOOL_QUERIES=("normalize JSON" "classify URL without fetching" "validate EVM wallet address format")
+          for Q in "${TOOL_QUERIES[@]}"; do
+            ENCODED=$(jq -rn --arg v "$Q" '$v|@uri')
+            TSTATUS=$(curl -sS -o /tmp/tools.json -w "%{http_code}" "https://neuronto.com/tools?q=$ENCODED&limit=20")
+            if [ "$TSTATUS" != "200" ]; then
+              echo "NEURONTO_TOOL | query=$Q | http=$TSTATUS"
+              continue
+            fi
+            TRANK=$(jq -r '
+              [(.tools // .results // .items // [])[] |
+                {name:(.name // .tool.name // ""), endpoint:(.endpoint // .server.url // .serverUrl // ""), server:(.server // .serverName // "")}] |
+              to_entries |
+              map(select(
+                (.value.name == "normalize_json") or
+                (.value.name == "classify_url_without_fetching") or
+                (.value.name == "validate_evm_wallet_address_format") or
+                (.value.endpoint | tostring | contains("mach-agent-lab-edge")) or
+                (.value.server | tostring | contains("MACH Agent Lab"))
+              )) |
+              if length>0 then (.[0].key+1) else 0 end
+            ' /tmp/tools.json)
+            TCOUNT=$(jq -r '(.tools // .results // .items // []) | length' /tmp/tools.json)
+            echo "NEURONTO_TOOL | query=$Q | rank=$TRANK | page_results=$TCOUNT"
           done
